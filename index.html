@@ -605,14 +605,9 @@ window.bookQueue = async function() {
 
   try {
     const ri = ROOMS.findIndex(r => r.key === roomKey);
-    // Use transaction to safely increment counter
-    const counterRef = ref(db, `${dbPath()}/${roomKey}/counter`);
-    let newNum;
-    await runTransaction(counterRef, current => { newNum = (current || 0) + 1; return newNum; });
-
     const id = `e${Date.now()}`;
     const entry = {
-      id, num: newNum, name, phone,
+      id, num: 0, name, phone,
       time: new Date().toLocaleTimeString('vi-VN'),
       order: Date.now(),
       status: 'pending'
@@ -620,23 +615,31 @@ window.bookQueue = async function() {
 
     await set(ref(db, `${dbPath()}/${roomKey}/queue/${id}`), entry);
 
-    // Show ticket
+    // Show pending ticket - wait for approval
     document.getElementById('form-card').style.display='none';
     document.getElementById('ticket-wrap').style.display='block';
-    document.getElementById('ticket-num').textContent = String(newNum).padStart(2,'0');
     document.getElementById('ticket-name').textContent = name;
     document.getElementById('ticket-room').textContent = roomDisplayName(roomKey);
+    document.getElementById('pending-ticket').style.display='block';
+    document.getElementById('confirmed-ticket').style.display='none';
 
-    // Wait count from local state (approximate)
-    const waitCount = state.rooms[ri].queue.length; // will be at the end
-    document.getElementById('ticket-notif').innerHTML = notifMsg(waitCount);
-
-    // QR
-    const canvas = document.getElementById('qr-canvas');
-    const img = new Image();
-    img.crossOrigin='anonymous';
-    img.onload = () => { canvas.getContext('2d').drawImage(img,0,0,140,140); };
-    img.src = QR_API(`filmnoir://check?phone=${phone}`);
+    // Listen for approval - when status changes to confirmed, show real ticket
+    const entryRef = ref(db, `${dbPath()}/${roomKey}/queue/${id}`);
+    const unsubscribe = onValue(entryRef, snap => {
+      const data = snap.val();
+      if(!data) return; // deleted (cancelled)
+      if(data.status === 'confirmed' && data.num > 0) {
+        // Show confirmed ticket with real number
+        document.getElementById('pending-ticket').style.display='none';
+        document.getElementById('confirmed-ticket').style.display='block';
+        document.getElementById('ticket-num').textContent = String(data.num).padStart(2,'0');
+        document.getElementById('ticket-name-confirmed').textContent = data.name;
+        document.getElementById('ticket-room-confirmed').textContent = roomDisplayName(roomKey);
+        const confirmed = state.rooms[ri].queue.filter(e => e.status !== 'pending');
+        const waitCount = confirmed.findIndex(q => q.id === id);
+        document.getElementById('ticket-notif').innerHTML = notifMsg(waitCount >= 0 ? waitCount : 0);
+      }
+    });
 
   } catch(e) {
     msgEl.innerHTML='<div class="msg msg-error">Lỗi kết nối. Vui lòng thử lại.</div>';
@@ -816,8 +819,12 @@ function renderAdminRoom(ri) {
 window.approveEntry = async function(ri, id) {
   setLoading(true);
   try {
-    await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), { status: 'confirmed' });
-    document.getElementById('msg-admin').innerHTML='<div class="msg msg-success">✓ Đã duyệt! Khách được vào hàng chờ chính thức.</div>';
+    // Assign real queue number via transaction
+    const counterRef = ref(db, `${dbPath()}/${ROOMS[ri].key}/counter`);
+    let newNum;
+    await runTransaction(counterRef, current => { newNum = (current || 0) + 1; return newNum; });
+    await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), { status: 'confirmed', num: newNum });
+    document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">✓ Đã duyệt! Cấp số <strong>${String(newNum).padStart(2,'0')}</strong> cho khách.</div>`;
   } catch(e) {
     document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
   }
