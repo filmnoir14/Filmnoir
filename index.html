@@ -416,6 +416,25 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
   <div class="card fade-in">
     <div class="card-title">Thống Kê Tổng Quan</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;" id="stats-summary"></div>
+
+    <!-- Weekly / Monthly -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px;" id="stats-period"></div>
+
+    <!-- Filter & Export -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:20px;">
+      <div style="flex:1;min-width:160px;">
+        <label>Từ ngày</label>
+        <input type="date" id="stats-from" style="width:100%;padding:10px 12px;font-family:'Montserrat',sans-serif;font-size:0.9rem;background:var(--beige);border:1px solid var(--beige-dark);color:var(--black);outline:none;"/>
+      </div>
+      <div style="flex:1;min-width:160px;">
+        <label>Đến ngày</label>
+        <input type="date" id="stats-to" style="width:100%;padding:10px 12px;font-family:'Montserrat',sans-serif;font-size:0.9rem;background:var(--beige);border:1px solid var(--beige-dark);color:var(--black);outline:none;"/>
+      </div>
+      <button class="btn btn-primary" style="width:auto;white-space:nowrap;" onclick="filterStats()">🔍 Lọc</button>
+      <button class="btn btn-primary" style="width:auto;white-space:nowrap;background:#2d7a4f;" onclick="exportExcel('filtered')">📥 Xuất Ngày Đã Lọc</button>
+      <button class="btn btn-cancel" style="white-space:nowrap;" onclick="exportExcel('all')">📥 Xuất Tất Cả</button>
+    </div>
+
     <div style="font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gray);margin-bottom:12px;">Lịch Sử Theo Ngày</div>
     <div id="stats-daily"></div>
   </div>
@@ -440,6 +459,10 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
   </div>
 
 </main>
+
+<!-- SheetJS -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- Firebase -->
 
@@ -524,29 +547,62 @@ window.unlockStats = function() {
   }
 };
 
+let allStatsData = {};
+
 async function renderStats() {
   const statsSnap = await get(ref(db, 'filmnoir/stats'));
-  const data = statsSnap.val();
+  allStatsData = statsSnap.val() || {};
+  renderStatsUI(allStatsData);
+}
+
+window.filterStats = function() {
+  const from = document.getElementById('stats-from').value;
+  const to = document.getElementById('stats-to').value;
+  if(!from && !to) { renderStatsUI(allStatsData); return; }
+  const filtered = {};
+  Object.entries(allStatsData).forEach(([day, rooms]) => {
+    if((!from || day >= from) && (!to || day <= to)) filtered[day] = rooms;
+  });
+  renderStatsUI(filtered, true);
+};
+
+function renderStatsUI(data, isFiltered=false) {
   const summaryEl = document.getElementById('stats-summary');
+  const periodEl = document.getElementById('stats-period');
   const dailyEl = document.getElementById('stats-daily');
 
-  if(!data) {
+  if(!data || !Object.keys(data).length) {
     summaryEl.innerHTML = '';
-    dailyEl.innerHTML = '<p style="color:var(--gray);font-style:italic;">Chưa có dữ liệu thống kê.</p>';
+    periodEl.innerHTML = '';
+    dailyEl.innerHTML = '<p style="color:var(--gray);font-style:italic;">Chưa có dữ liệu trong khoảng thời gian này.</p>';
     return;
   }
 
-  // Calculate totals
-  let totalApproved = 0, totalCancelled = 0;
-  const roomTotals = { room1:0, room2:0, room3:0 };
   const days = Object.entries(data).sort((a,b) => b[0].localeCompare(a[0]));
+  let totalApproved=0, totalCancelled=0;
+  const roomTotals = {room1:0,room2:0,room3:0};
+
+  // Weekly & monthly buckets
+  const weeklyMap = {}, monthlyMap = {};
 
   days.forEach(([day, rooms]) => {
     Object.entries(rooms).forEach(([roomKey, stats]) => {
-      totalApproved += stats.approved || 0;
-      totalCancelled += stats.cancelled || 0;
+      totalApproved += stats.approved||0;
+      totalCancelled += stats.cancelled||0;
       roomTotals[roomKey] = (roomTotals[roomKey]||0) + (stats.approved||0);
     });
+
+    // Week key (Mon of week)
+    const d = new Date(day);
+    const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay()+6)%7));
+    const wk = mon.toISOString().slice(0,10);
+    if(!weeklyMap[wk]) weeklyMap[wk]={approved:0,cancelled:0};
+    Object.values(rooms).forEach(s => { weeklyMap[wk].approved+=s.approved||0; weeklyMap[wk].cancelled+=s.cancelled||0; });
+
+    // Month key
+    const mk = day.slice(0,7);
+    if(!monthlyMap[mk]) monthlyMap[mk]={approved:0,cancelled:0};
+    Object.values(rooms).forEach(s => { monthlyMap[mk].approved+=s.approved||0; monthlyMap[mk].cancelled+=s.cancelled||0; });
   });
 
   const topRoom = ROOMS[Object.values(roomTotals).indexOf(Math.max(...Object.values(roomTotals)))];
@@ -554,34 +610,60 @@ async function renderStats() {
   summaryEl.innerHTML = `
     <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:20px;text-align:center;">
       <div style="font-family:'Lobster',cursive;font-size:2.5rem;color:var(--wine);">${totalApproved}</div>
-      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:4px;">TỔNG KHÁCH</div>
+      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:4px;">${isFiltered?'KHÁCH (ĐÃ LỌC)':'TỔNG KHÁCH'}</div>
     </div>
     <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:20px;text-align:center;">
       <div style="font-family:'Lobster',cursive;font-size:2.5rem;color:#b43c3c;">${totalCancelled}</div>
-      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:4px;">TỔNG HUỶ</div>
+      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:4px;">${isFiltered?'HUỶ (ĐÃ LỌC)':'TỔNG HUỶ'}</div>
     </div>
     <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:20px;text-align:center;">
-      <div style="font-family:'Pinyon Script',cursive;font-size:1.4rem;color:var(--wine);">${topRoom ? topRoom.name : '–'}</div>
+      <div style="font-family:'Pinyon Script',cursive;font-size:1.4rem;color:var(--wine);">${topRoom?topRoom.name:'–'}</div>
       <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:4px;">PHÒNG HOT NHẤT</div>
     </div>
   `;
 
+  // Weekly summary
+  const weeks = Object.entries(weeklyMap).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,4);
+  const months = Object.entries(monthlyMap).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,4);
+
+  periodEl.innerHTML = `
+    <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:16px;">
+      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:3px;color:var(--gray);margin-bottom:10px;">THEO TUẦN</div>
+      ${weeks.map(([wk,s])=>`
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--beige-dark);">
+          <span style="font-family:'Montserrat',sans-serif;font-size:9px;color:var(--black);">Tuần ${wk}</span>
+          <span style="font-family:'Montserrat',sans-serif;font-size:9px;"><span style="color:var(--wine);">✓${s.approved}</span> <span style="color:#b43c3c;">✕${s.cancelled}</span></span>
+        </div>
+      `).join('')}
+    </div>
+    <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:16px;">
+      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:3px;color:var(--gray);margin-bottom:10px;">THEO THÁNG</div>
+      ${months.map(([mk,s])=>`
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--beige-dark);">
+          <span style="font-family:'Montserrat',sans-serif;font-size:9px;color:var(--black);">${mk}</span>
+          <span style="font-family:'Montserrat',sans-serif;font-size:9px;"><span style="color:var(--wine);">✓${s.approved}</span> <span style="color:#b43c3c;">✕${s.cancelled}</span></span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
   dailyEl.innerHTML = days.map(([day, rooms]) => {
-    const dayApproved = Object.values(rooms).reduce((s,r) => s+(r.approved||0), 0);
-    const dayCancelled = Object.values(rooms).reduce((s,r) => s+(r.cancelled||0), 0);
+    const dayApproved = Object.values(rooms).reduce((s,r)=>s+(r.approved||0),0);
+    const dayCancelled = Object.values(rooms).reduce((s,r)=>s+(r.cancelled||0),0);
     return `
       <div style="border:1px solid var(--beige-dark);padding:16px 20px;margin-bottom:8px;background:var(--cream);">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <div style="font-family:'Montserrat',sans-serif;font-size:11px;font-weight:600;color:var(--black);">${day}</div>
-          <div style="display:flex;gap:16px;">
+          <div style="display:flex;gap:12px;align-items:center;">
             <span style="font-family:'Montserrat',sans-serif;font-size:10px;color:var(--wine);">✓ ${dayApproved} khách</span>
             <span style="font-family:'Montserrat',sans-serif;font-size:10px;color:#b43c3c;">✕ ${dayCancelled} huỷ</span>
+            <button onclick="exportExcel('day','${day}')" style="font-family:'Montserrat',sans-serif;font-size:8px;letter-spacing:1px;padding:4px 10px;background:var(--wine);color:var(--beige);border:none;cursor:pointer;">↓ Excel</button>
           </div>
         </div>
         <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;">
-          ${ROOMS.map(r => `
+          ${ROOMS.map(r=>`
             <span style="font-family:'Montserrat',sans-serif;font-size:9px;color:var(--gray);">
-              ${r.label}: <strong style="color:var(--wine)">${(rooms[r.key]&&rooms[r.key].approved)||0}</strong> khách
+              ${r.label}: <strong style="color:var(--wine)">${(rooms[r.key]&&rooms[r.key].approved)||0}</strong> khách · <span style="color:#b43c3c;">${(rooms[r.key]&&rooms[r.key].cancelled)||0}</span> huỷ
             </span>
           `).join('')}
         </div>
@@ -589,6 +671,74 @@ async function renderStats() {
     `;
   }).join('');
 }
+
+window.exportExcel = function(mode, specificDay='') {
+  const fromVal = document.getElementById('stats-from').value;
+  const toVal = document.getElementById('stats-to').value;
+  let exportData = allStatsData;
+
+  if(mode==='day') {
+    exportData = { [specificDay]: allStatsData[specificDay] || {} };
+  } else if(mode==='filtered') {
+    exportData = {};
+    Object.entries(allStatsData).forEach(([day,rooms]) => {
+      if((!fromVal||day>=fromVal)&&(!toVal||day<=toVal)) exportData[day]=rooms;
+    });
+  }
+
+  const rows = [];
+  // Header
+  rows.push(['Ngày','Phòng 1 – Star Light (Khách)','Phòng 1 (Huỷ)','Phòng 2 – Heart Garden (Khách)','Phòng 2 (Huỷ)','Phòng 3 – Red Cherry (Khách)','Phòng 3 (Huỷ)','Tổng Khách','Tổng Huỷ']);
+
+  let grandApproved=0, grandCancelled=0;
+  const sortedDays = Object.entries(exportData).sort((a,b)=>a[0].localeCompare(b[0]));
+  sortedDays.forEach(([day,rooms])=>{
+    const r1 = rooms.room1||{};
+    const r2 = rooms.room2||{};
+    const r3 = rooms.room3||{};
+    const ta = (r1.approved||0)+(r2.approved||0)+(r3.approved||0);
+    const tc = (r1.cancelled||0)+(r2.cancelled||0)+(r3.cancelled||0);
+    grandApproved+=ta; grandCancelled+=tc;
+    rows.push([day, r1.approved||0, r1.cancelled||0, r2.approved||0, r2.cancelled||0, r3.approved||0, r3.cancelled||0, ta, tc]);
+  });
+
+  // Total row
+  rows.push(['TỔNG CỘNG','','','','','','',grandApproved,grandCancelled]);
+
+  // Weekly summary sheet
+  const weekRows = [['Tuần (Thứ 2)','Tổng Khách','Tổng Huỷ']];
+  const weeklyMap = {};
+  sortedDays.forEach(([day,rooms])=>{
+    const d = new Date(day);
+    const mon = new Date(d); mon.setDate(d.getDate()-((d.getDay()+6)%7));
+    const wk = mon.toISOString().slice(0,10);
+    if(!weeklyMap[wk]) weeklyMap[wk]={approved:0,cancelled:0};
+    Object.values(rooms).forEach(s=>{weeklyMap[wk].approved+=s.approved||0;weeklyMap[wk].cancelled+=s.cancelled||0;});
+  });
+  Object.entries(weeklyMap).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([wk,s])=>{
+    weekRows.push([`Tuần ${wk}`,s.approved,s.cancelled]);
+  });
+
+  // Monthly summary sheet
+  const monthRows = [['Tháng','Tổng Khách','Tổng Huỷ']];
+  const monthlyMap = {};
+  sortedDays.forEach(([day,rooms])=>{
+    const mk=day.slice(0,7);
+    if(!monthlyMap[mk]) monthlyMap[mk]={approved:0,cancelled:0};
+    Object.values(rooms).forEach(s=>{monthlyMap[mk].approved+=s.approved||0;monthlyMap[mk].cancelled+=s.cancelled||0;});
+  });
+  Object.entries(monthlyMap).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([mk,s])=>{
+    monthRows.push([mk,s.approved,s.cancelled]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Theo Ngày');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(weekRows), 'Theo Tuần');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(monthRows), 'Theo Tháng');
+
+  const label = mode==='day' ? specificDay : mode==='filtered' ? `${fromVal}_${toVal}` : 'TatCa';
+  XLSX.writeFile(wb, `FilmNoir_ThongKe_${label}.xlsx`);
+};
 
 function startListening() {
   // Listen cancelled history
