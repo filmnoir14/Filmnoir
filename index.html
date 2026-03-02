@@ -256,7 +256,6 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
   <button onclick="switchTab('check')">Kiểm Tra & Huỷ Lịch</button>
   <button onclick="switchTab('queue')">Hàng Chờ</button>
   <button onclick="switchTab('admin')">Quản Lý</button>
-  <button onclick="switchTab('stats')">Thống Kê</button>
 </nav>
 
 <main>
@@ -397,18 +396,32 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
       <div class="card-title">Lịch Sử Huỷ Lịch Hôm Nay</div>
       <div id="admin-cancelled-list"><p style="color:var(--gray);font-style:italic;">Chưa có lượt huỷ nào hôm nay.</p></div>
     </div>
+
+```
+<!-- Stats unlock -->
+<div class="card fade-in" id="stats-locked-card">
+  <div class="card-title">Thống Kê</div>
+  <div style="text-align:center;padding:12px 0;">
+    <div style="font-size:1.5rem;margin-bottom:12px;">📊</div>
+    <div style="font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:2px;color:var(--gray);margin-bottom:16px;">NHẬP MẬT KHẨU ĐỂ XEM THỐNG KÊ</div>
+    <input type="password" id="stats-pw-input" placeholder="••••••••" 
+      style="width:100%;max-width:260px;padding:12px 16px;font-family:'Montserrat',sans-serif;font-size:1rem;background:var(--beige);border:1px solid var(--beige-dark);color:var(--black);outline:none;text-align:center;letter-spacing:4px;margin-bottom:8px;"
+      onkeydown="if(event.key==='Enter')unlockStats()"/>
+    <div id="stats-pw-error" style="font-family:'Montserrat',sans-serif;font-size:10px;color:#b43c3c;margin-bottom:8px;display:none;">Mật khẩu không đúng.</div>
+    <button class="btn btn-primary" style="max-width:260px;" onclick="unlockStats()">Xem Thống Kê</button>
   </div>
+</div>
 
-  <!-- STATS -->
+<div id="stats-content" style="display:none;">
+  <div class="card fade-in">
+    <div class="card-title">Thống Kê Tổng Quan</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;" id="stats-summary"></div>
+    <div style="font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gray);margin-bottom:12px;">Lịch Sử Theo Ngày</div>
+    <div id="stats-daily"></div>
+  </div>
+</div>
+```
 
-  <div id="tab-stats" class="tab-content" style="display:none;">
-    <div class="ornament">— ◈ —</div>
-    <div class="card fade-in">
-      <div class="card-title">Thống Kê Tổng Quan</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;" id="stats-summary"></div>
-      <div style="font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gray);margin-bottom:12px;">Lịch Sử Theo Ngày</div>
-      <div id="stats-daily"></div>
-    </div>
   </div>
 
   <!-- MODAL -->
@@ -497,6 +510,19 @@ function dbPath() { return `filmnoir/${todayKey()}`; }
 
 // ─── REALTIME LISTENER ────────────────────────────────────────────
 const dataRef = () => ref(db, dbPath());
+
+window.unlockStats = function() {
+  const pw = document.getElementById('stats-pw-input').value;
+  if(pw === 'Filmnoir14@') {
+    document.getElementById('stats-locked-card').style.display='none';
+    document.getElementById('stats-content').style.display='block';
+    renderStats();
+  } else {
+    document.getElementById('stats-pw-error').style.display='block';
+    document.getElementById('stats-pw-input').value='';
+    document.getElementById('stats-pw-input').focus();
+  }
+};
 
 async function renderStats() {
   const statsSnap = await get(ref(db, 'filmnoir/stats'));
@@ -664,7 +690,7 @@ window.submitAdminPw = function() {
 
 // ─── TABS ─────────────────────────────────────────────────────────
 window.switchTab = function(tab) {
-  if((tab === 'admin' || tab === 'stats') && !adminUnlocked) { showAdminModal(); return; }
+  if(tab === 'admin' && !adminUnlocked) { showAdminModal(); return; }
   doSwitchTab(tab);
 };
 
@@ -678,7 +704,6 @@ function doSwitchTab(tab) {
   });
   if(tab==='queue') { renderQueueOverview(); renderQueueRoom(activeQueueRoom); }
   if(tab==='admin') { renderAdminOverview(); renderAdminRoom(activeAdminRoom); }
-  if(tab==='stats') { renderStats(); }
   if(tab==='check') document.getElementById('check-result').style.display='none';
 }
 
