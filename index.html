@@ -175,6 +175,9 @@ text-align:center; cursor:pointer; transition:border-color .2s, box-shadow .2s;
 .btn-serve:hover { background:var(–wine-dark); }
 .btn-remove { background:transparent; color:#b43c3c; border:1px solid #b43c3c; font-family:‘Montserrat’,sans-serif; font-size:9px; letter-spacing:2px; padding:6px 14px; cursor:pointer; white-space:nowrap; }
 .btn-remove:hover { background:#b43c3c; color:white; }
+.btn-room-change { background:var(–cream); border:1px solid var(–wine); color:var(–wine); font-family:‘Montserrat’,sans-serif; font-size:10px; letter-spacing:2px; padding:10px 16px; cursor:pointer; text-align:left; width:100%; transition:all .2s; }
+.btn-room-change:hover { background:var(–wine); color:var(–beige); }
+.change-request-item { display:flex; align-items:center; gap:12px; padding:12px 16px; border:1px solid var(–gold); margin-bottom:6px; background:#fffdf5; }
 
 /* Loading */
 .loading-bar {
@@ -226,6 +229,8 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
 .modal-close { font-family:‘Montserrat’,sans-serif; font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(–gray); background:none; border:none; cursor:pointer; text-decoration:underline; }
 .modal-close:hover { color:var(–wine); }
 
+.cancelled-item { display:flex; align-items:center; gap:12px; padding:12px 16px; border:1px solid #e8b4b4; margin-bottom:6px; background:#fff8f8; }
+.cancelled-num { font-family:‘Lobster’,cursive; font-size:1.4rem; color:#b43c3c; min-width:40px; text-align:center; }
 .fade-in { animation:fadeIn 0.4s ease forwards; }
 @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 
@@ -251,6 +256,7 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
   <button onclick="switchTab('check')">Kiểm Tra & Huỷ Lịch</button>
   <button onclick="switchTab('queue')">Hàng Chờ</button>
   <button onclick="switchTab('admin')">Quản Lý</button>
+  <button onclick="switchTab('stats')">Thống Kê</button>
 </nav>
 
 <main>
@@ -341,7 +347,15 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
           <div id="chk-notif"></div>
         </div>
         <br/>
-        <button class="btn btn-primary" style="background:#b43c3c;margin-top:12px;" onclick="cancelFromCheck()">✕ Huỷ Lượt Của Tôi</button>
+        <div id="room-change-section" style="margin-top:12px;">
+          <button class="btn btn-primary" style="background:#b43c3c;margin-top:0;" onclick="cancelFromCheck()">✕ Huỷ Lượt Của Tôi</button>
+          <button class="btn btn-primary" style="background:var(--gray);margin-top:8px;" onclick="showRoomChangeOptions()">⇄ Yêu Cầu Đổi Phòng</button>
+          <div id="room-change-options" style="display:none;margin-top:16px;">
+            <div style="font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:2px;color:var(--gray);margin-bottom:10px;text-transform:uppercase;">Chọn phòng muốn đổi sang</div>
+            <div id="room-change-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <button class="btn btn-cancel" style="margin-top:12px;" onclick="hideRoomChangeOptions()">← Huỷ</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -378,6 +392,22 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
       </div>
       <div id="admin-pending-list" style="margin-bottom:20px;"></div>
       <div id="admin-queue-list"></div>
+    </div>
+    <div class="card fade-in">
+      <div class="card-title">Lịch Sử Huỷ Lịch Hôm Nay</div>
+      <div id="admin-cancelled-list"><p style="color:var(--gray);font-style:italic;">Chưa có lượt huỷ nào hôm nay.</p></div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+
+  <div id="tab-stats" class="tab-content" style="display:none;">
+    <div class="ornament">— ◈ —</div>
+    <div class="card fade-in">
+      <div class="card-title">Thống Kê Tổng Quan</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;" id="stats-summary"></div>
+      <div style="font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gray);margin-bottom:12px;">Lịch Sử Theo Ngày</div>
+      <div id="stats-daily"></div>
     </div>
   </div>
 
@@ -468,7 +498,97 @@ function dbPath() { return `filmnoir/${todayKey()}`; }
 // ─── REALTIME LISTENER ────────────────────────────────────────────
 const dataRef = () => ref(db, dbPath());
 
+async function renderStats() {
+  const statsSnap = await get(ref(db, 'filmnoir/stats'));
+  const data = statsSnap.val();
+  const summaryEl = document.getElementById('stats-summary');
+  const dailyEl = document.getElementById('stats-daily');
+
+  if(!data) {
+    summaryEl.innerHTML = '';
+    dailyEl.innerHTML = '<p style="color:var(--gray);font-style:italic;">Chưa có dữ liệu thống kê.</p>';
+    return;
+  }
+
+  // Calculate totals
+  let totalApproved = 0, totalCancelled = 0;
+  const roomTotals = { room1:0, room2:0, room3:0 };
+  const days = Object.entries(data).sort((a,b) => b[0].localeCompare(a[0]));
+
+  days.forEach(([day, rooms]) => {
+    Object.entries(rooms).forEach(([roomKey, stats]) => {
+      totalApproved += stats.approved || 0;
+      totalCancelled += stats.cancelled || 0;
+      roomTotals[roomKey] = (roomTotals[roomKey]||0) + (stats.approved||0);
+    });
+  });
+
+  const topRoom = ROOMS[Object.values(roomTotals).indexOf(Math.max(...Object.values(roomTotals)))];
+
+  summaryEl.innerHTML = `
+    <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:20px;text-align:center;">
+      <div style="font-family:'Lobster',cursive;font-size:2.5rem;color:var(--wine);">${totalApproved}</div>
+      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:4px;">TỔNG KHÁCH</div>
+    </div>
+    <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:20px;text-align:center;">
+      <div style="font-family:'Lobster',cursive;font-size:2.5rem;color:#b43c3c;">${totalCancelled}</div>
+      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:4px;">TỔNG HUỶ</div>
+    </div>
+    <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:20px;text-align:center;">
+      <div style="font-family:'Pinyon Script',cursive;font-size:1.4rem;color:var(--wine);">${topRoom ? topRoom.name : '–'}</div>
+      <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:4px;">PHÒNG HOT NHẤT</div>
+    </div>
+  `;
+
+  dailyEl.innerHTML = days.map(([day, rooms]) => {
+    const dayApproved = Object.values(rooms).reduce((s,r) => s+(r.approved||0), 0);
+    const dayCancelled = Object.values(rooms).reduce((s,r) => s+(r.cancelled||0), 0);
+    return `
+      <div style="border:1px solid var(--beige-dark);padding:16px 20px;margin-bottom:8px;background:var(--cream);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div style="font-family:'Montserrat',sans-serif;font-size:11px;font-weight:600;color:var(--black);">${day}</div>
+          <div style="display:flex;gap:16px;">
+            <span style="font-family:'Montserrat',sans-serif;font-size:10px;color:var(--wine);">✓ ${dayApproved} khách</span>
+            <span style="font-family:'Montserrat',sans-serif;font-size:10px;color:#b43c3c;">✕ ${dayCancelled} huỷ</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;">
+          ${ROOMS.map(r => `
+            <span style="font-family:'Montserrat',sans-serif;font-size:9px;color:var(--gray);">
+              ${r.label}: <strong style="color:var(--wine)">${(rooms[r.key]&&rooms[r.key].approved)||0}</strong> khách
+            </span>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function startListening() {
+  // Listen cancelled history
+  onValue(ref(db, `${dbPath()}/cancelled`), snap => {
+    const data = snap.val();
+    const el = document.getElementById('admin-cancelled-list');
+    if(!el) return;
+    if(!data) {
+      el.innerHTML='<p style="color:var(--gray);font-style:italic;">Chưa có lượt huỷ nào hôm nay.</p>';
+      return;
+    }
+    const list = Object.values(data).reverse();
+    el.innerHTML = list.map(entry => `
+      <div class="cancelled-item">
+        <div class="cancelled-num">${entry.num > 0 ? String(entry.num).padStart(2,'0') : '?'}</div>
+        <div style="flex:1;">
+          <div style="font-size:1rem;">${entry.name}</div>
+          <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:3px;">
+            ${entry.phone} · ${entry.roomName} · Huỷ lúc ${entry.cancelledAt}
+            ${entry.status==='pending'?'<span style="color:#b43c3c;margin-left:6px;">(chưa thanh toán)</span>':'<span style="color:#a07020;margin-left:6px;">(đã thanh toán)</span>'}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  });
+
   onValue(dataRef(), snap => {
     const data = snap.val();
     if(!data) {
@@ -544,7 +664,7 @@ window.submitAdminPw = function() {
 
 // ─── TABS ─────────────────────────────────────────────────────────
 window.switchTab = function(tab) {
-  if(tab === 'admin' && !adminUnlocked) { showAdminModal(); return; }
+  if((tab === 'admin' || tab === 'stats') && !adminUnlocked) { showAdminModal(); return; }
   doSwitchTab(tab);
 };
 
@@ -558,6 +678,7 @@ function doSwitchTab(tab) {
   });
   if(tab==='queue') { renderQueueOverview(); renderQueueRoom(activeQueueRoom); }
   if(tab==='admin') { renderAdminOverview(); renderAdminRoom(activeAdminRoom); }
+  if(tab==='stats') { renderStats(); }
   if(tab==='check') document.getElementById('check-result').style.display='none';
 }
 
@@ -686,16 +807,122 @@ window.checkQueue = function() {
   result.style.display='block';
 };
 
+window.showRoomChangeOptions = function() {
+  const phone = document.getElementById('chk-phone').value.trim();
+  let foundEntry=null, foundRi=-1;
+  state.rooms.forEach((room,ri) => {
+    const e = room.queue.find(q => q.phone===phone);
+    if(e && e.status !== 'pending') { foundEntry=e; foundRi=ri; }
+  });
+  if(!foundEntry) {
+    document.getElementById('msg-check').innerHTML='<div class="msg msg-error">Chỉ có thể đổi phòng sau khi được duyệt thanh toán.</div>';
+    return;
+  }
+  if(foundEntry.changeRequested) {
+    document.getElementById('msg-check').innerHTML='<div class="msg msg-error">Bạn đã gửi yêu cầu đổi phòng rồi, vui lòng chờ nhân viên xác nhận.</div>';
+    return;
+  }
+  // Show other rooms
+  const otherRooms = ROOMS.filter((_,i) => i !== foundRi);
+  document.getElementById('room-change-list').innerHTML = otherRooms.map(r => `
+    <button class="btn-room-change" onclick="submitRoomChange('${foundEntry.id}',${foundRi},'${r.key}','${r.label} – ${r.name}')">
+      ${r.label} – ${r.name}
+      <span style="font-size:9px;opacity:0.7;display:block;margin-top:2px;">${state.rooms[ROOMS.findIndex(x=>x.key===r.key)].queue.filter(e=>e.status!=='pending').length} người đang chờ</span>
+    </button>
+  `).join('');
+  document.getElementById('room-change-options').style.display='block';
+};
+
+window.hideRoomChangeOptions = function() {
+  document.getElementById('room-change-options').style.display='none';
+};
+
+window.submitRoomChange = async function(entryId, fromRi, toRoomKey, toRoomName) {
+  const fromRoomKey = ROOMS[fromRi].key;
+  setLoading(true);
+  try {
+    await update(ref(db, `${dbPath()}/${fromRoomKey}/queue/${entryId}`), {
+      changeRequested: true,
+      changeToRoom: toRoomKey,
+      changeToRoomName: toRoomName,
+      changeRequestedAt: new Date().toLocaleTimeString('vi-VN')
+    });
+    document.getElementById('room-change-options').style.display='none';
+    document.getElementById('check-result').style.display='none';
+    document.getElementById('msg-check').innerHTML=`<div class="msg msg-success" style="line-height:1.8;">
+      ✓ Yêu cầu đổi sang <strong>${toRoomName}</strong> đã được gửi.<br/>
+      <span style="font-size:0.9rem;">Vui lòng thông báo nhân viên tại quầy để được duyệt.</span>
+    </div>`;
+  } catch(e) {
+    document.getElementById('msg-check').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
+  }
+  setLoading(false);
+};
+
+window.approveRoomChange = async function(fromRi, entryId, toRoomKey) {
+  setLoading(true);
+  try {
+    // Get current entry
+    const entrySnap = await get(ref(db, `${dbPath()}/${ROOMS[fromRi].key}/queue/${entryId}`));
+    const entry = entrySnap.val();
+    if(!entry) { setLoading(false); return; }
+
+    // Remove from old room
+    await remove(ref(db, `${dbPath()}/${ROOMS[fromRi].key}/queue/${entryId}`));
+
+    // Add to new room at end (new order = now)
+    const newId = `e${Date.now()}`;
+    await set(ref(db, `${dbPath()}/${toRoomKey}/queue/${newId}`), {
+      ...entry,
+      id: newId,
+      order: Date.now(),
+      changeRequested: false,
+      movedFrom: ROOMS[fromRi].label,
+      num: entry.num // keep same number
+    });
+
+    document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">✓ Đã duyệt đổi phòng cho <strong>${entry.name}</strong> sang ${entry.changeToRoomName}.</div>`;
+  } catch(e) {
+    document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
+  }
+  setLoading(false);
+};
+
 window.cancelFromCheck = async function() {
   const phone = document.getElementById('chk-phone').value.trim();
   for(let ri=0; ri<ROOMS.length; ri++) {
     const entry = state.rooms[ri].queue.find(q => q.phone===phone);
     if(entry) {
       setLoading(true);
+      // Log stats
+      const cStatsRef = ref(db, `filmnoir/stats/${todayKey()}/${ROOMS[ri].key}`);
+      await runTransaction(cStatsRef, current => {
+        const c = current || { approved:0, cancelled:0 };
+        return { ...c, cancelled: (c.cancelled||0) + 1 };
+      });
+      // Log to cancelled history
+      await set(ref(db, `${dbPath()}/cancelled/${entry.id}`), {
+        name: entry.name,
+        phone: entry.phone,
+        room: ROOMS[ri].key,
+        roomName: `${ROOMS[ri].label} – ${ROOMS[ri].name}`,
+        num: entry.num || 0,
+        status: entry.status,
+        time: entry.time,
+        cancelledAt: new Date().toLocaleTimeString('vi-VN')
+      });
       await remove(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${entry.id}`));
       setLoading(false);
       document.getElementById('check-result').style.display='none';
-      document.getElementById('msg-check').innerHTML='<div class="msg msg-success">Lượt của bạn đã được huỷ thành công.</div>';
+      document.getElementById('msg-check').innerHTML=`<div class="msg msg-success" style="line-height:1.8;">
+        ✓ Lượt của bạn đã được huỷ thành công.<br/>
+        <span style="font-size:0.9rem;">Để được hoàn tiền, vui lòng liên hệ nhân viên tại quầy hoặc:</span><br/>
+        <span style="font-family:'Montserrat',sans-serif;font-size:0.8rem;">
+          📞 <a href="tel:0917182226" style="color:var(--wine);text-decoration:none;font-weight:600;">0917 182 226</a>
+          &nbsp;·&nbsp;
+          📷 <a href="https://instagram.com/filmnoir.ptb" target="_blank" style="color:var(--wine);text-decoration:none;font-weight:600;">@filmnoir.ptb</a>
+        </span>
+      </div>`;
       return;
     }
   }
@@ -777,10 +1004,34 @@ function renderAdminRoom(ri) {
   const pending = room.queue.filter(e => e.status === 'pending');
   const confirmed = room.queue.filter(e => e.status !== 'pending');
 
+  // Change requests across all rooms
+  const allChangeRequests = state.rooms.flatMap((room, rIdx) =>
+    room.queue.filter(e => e.changeRequested).map(e => ({...e, fromRi: rIdx}))
+  );
+
   // Pending section
   const pendingEl = document.getElementById('admin-pending-list');
+  let pendingHTML = '';
+
+  if(allChangeRequests.length) {
+    pendingHTML += `<div class="pending-section-title" style="color:#a07020;">⇄ Yêu Cầu Đổi Phòng (${allChangeRequests.length})</div>` +
+      allChangeRequests.map(entry => `
+        <div class="change-request-item">
+          <div class="q-num" style="color:#a07020;font-family:'Lobster',cursive;font-size:1.4rem;">${String(entry.num).padStart(2,'0')}</div>
+          <div class="q-info" style="flex:1;">
+            <div class="q-name">${entry.name}</div>
+            <div style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:1px;color:var(--gray);margin-top:3px;">
+              ${entry.phone} · ${ROOMS[entry.fromRi].label} → ${entry.changeToRoomName} · ${entry.changeRequestedAt}
+            </div>
+          </div>
+          <button class="btn-approve" onclick="approveRoomChange(${entry.fromRi},'${entry.id}','${entry.changeToRoom}')">✓ Duyệt</button>
+          <button class="btn-remove" onclick="cancelRoomChange(${entry.fromRi},'${entry.id}')">✕</button>
+        </div>
+      `).join('');
+  }
+
   if(pending.length) {
-    pendingEl.innerHTML = `<div class="pending-section-title">⏳ Chờ Xác Nhận Thanh Toán (${pending.length})</div>` +
+    pendingHTML += `<div class="pending-section-title" style="margin-top:${allChangeRequests.length?'16px':'0'};">⏳ Chờ Xác Nhận Thanh Toán (${pending.length})</div>` +
       pending.map(entry => `
         <div class="admin-queue-item" style="border-color:#e8b4b4;background:#fff8f8;">
           <div class="q-num" style="color:#b43c3c;">?</div>
@@ -792,9 +1043,9 @@ function renderAdminRoom(ri) {
           <button class="btn-remove" onclick="cancelEntry(${ri},'${entry.id}',${entry.num})">Huỷ</button>
         </div>
       `).join('');
-  } else {
-    pendingEl.innerHTML = '';
   }
+
+  pendingEl.innerHTML = pendingHTML || '';
 
   // Confirmed queue section
   const listEl = document.getElementById('admin-queue-list');
@@ -824,6 +1075,12 @@ window.approveEntry = async function(ri, id) {
     let newNum;
     await runTransaction(counterRef, current => { newNum = (current || 0) + 1; return newNum; });
     await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), { status: 'confirmed', num: newNum });
+    // Log stats
+    const statsRef = ref(db, `filmnoir/stats/${todayKey()}/${ROOMS[ri].key}`);
+    await runTransaction(statsRef, current => {
+      const c = current || { approved:0, cancelled:0 };
+      return { ...c, approved: (c.approved||0) + 1 };
+    });
     document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">✓ Đã duyệt! Cấp số <strong>${String(newNum).padStart(2,'0')}</strong> cho khách.</div>`;
   } catch(e) {
     document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
@@ -847,6 +1104,18 @@ window.serveNext = async function() {
     document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
   }
   setLoading(false);
+};
+
+window.cancelRoomChange = async function(ri, id) {
+  setLoading(true);
+  await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), {
+    changeRequested: false,
+    changeToRoom: null,
+    changeToRoomName: null,
+    changeRequestedAt: null
+  });
+  setLoading(false);
+  document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Đã từ chối yêu cầu đổi phòng.</div>';
 };
 
 window.cancelEntry = async function(ri, id, num) {
