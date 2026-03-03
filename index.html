@@ -231,7 +231,24 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
 
 .cancelled-item { display:flex; align-items:center; gap:12px; padding:12px 16px; border:1px solid #e8b4b4; margin-bottom:6px; background:#fff8f8; }
 .cancelled-num { font-family:‘Lobster’,cursive; font-size:1.4rem; color:#b43c3c; min-width:40px; text-align:center; }
+.display-room-card {
+background:rgba(245,239,230,0.05); border:1px solid rgba(245,239,230,0.15);
+padding:40px 20px; text-align:center; border-radius:4px;
+}
+.display-room-name { font-family:‘Pinyon Script’,cursive; font-size:2rem; color:rgba(201,169,110,0.9); margin-bottom:8px; }
+.display-serving-label { font-family:‘Montserrat’,sans-serif; font-size:10px; letter-spacing:4px; color:rgba(245,239,230,0.4); text-transform:uppercase; margin-bottom:12px; }
+.display-serving-num { font-family:‘Lobster’,cursive; font-size:8rem; color:#f5efe6; line-height:1; }
+.display-waiting { font-family:‘Montserrat’,sans-serif; font-size:11px; letter-spacing:2px; color:rgba(245,239,230,0.4); margin-top:12px; }
+.display-closed { font-family:‘Montserrat’,sans-serif; font-size:14px; letter-spacing:4px; color:#b43c3c; margin-top:24px; }
 .fade-in { animation:fadeIn 0.4s ease forwards; }
+.note-input { width:100%; padding:8px 12px; font-family:‘Montserrat’,sans-serif; font-size:0.85rem; background:var(–beige); border:1px solid var(–beige-dark); color:var(–black); outline:none; resize:none; }
+.note-input:focus { border-color:var(–wine); }
+.note-badge { font-family:‘Montserrat’,sans-serif; font-size:8px; letter-spacing:1px; background:var(–gold); color:var(–black); padding:2px 8px; }
+.countdown-wrap { font-family:‘Montserrat’,sans-serif; font-size:0.8rem; letter-spacing:1px; color:rgba(245,239,230,0.6); margin-top:8px; }
+.peak-bar-wrap { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.peak-bar-label { font-family:‘Montserrat’,sans-serif; font-size:9px; letter-spacing:1px; color:var(–gray); min-width:40px; }
+.peak-bar { height:12px; background:var(–wine); opacity:0.7; transition:width .3s; }
+.peak-bar-num { font-family:‘Montserrat’,sans-serif; font-size:9px; color:var(–gray); }
 @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 
 @media(max-width:600px) {
@@ -255,6 +272,7 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
   <button class="active" onclick="switchTab('book')">Đặt Lịch</button>
   <button onclick="switchTab('check')">Kiểm Tra & Huỷ Lịch</button>
   <button onclick="switchTab('queue')">Hàng Chờ</button>
+  <button onclick="switchTab('display')">Màn Hình Quầy</button>
   <button onclick="switchTab('admin')">Quản Lý</button>
 </nav>
 
@@ -298,6 +316,7 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
         <div style="background:linear-gradient(135deg,var(--wine-dark),var(--wine));color:var(--beige);padding:16px 20px;margin:8px 0;font-family:'Montserrat',sans-serif;font-size:0.85rem;letter-spacing:1px;line-height:1.7;text-align:center;">
           💳 Vui lòng thanh toán để xác nhận số của bạn nhé!<br/>
           <span style="font-size:0.75rem;opacity:0.85;">Số thứ tự sẽ được cấp sau khi nhân viên xác nhận thanh toán.</span>
+          <div class="countdown-wrap" id="wait-countdown"></div>
         </div>
       </div>
       <div class="ticket fade-in" id="confirmed-ticket" style="display:none;">
@@ -372,6 +391,35 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
     <div id="queue-room-detail"></div>
   </div>
 
+  <!-- DISPLAY -->
+
+  <div id="tab-display" class="tab-content" style="display:none;">
+    <div id="display-screen" style="
+      position:fixed;inset:0;background:#1a1410;z-index:99990;
+      display:none;flex-direction:column;justify-content:center;align-items:center;
+      font-family:'Lobster',cursive;
+    ">
+      <div style="position:absolute;top:24px;left:50%;transform:translateX(-50%);font-family:'Montserrat',sans-serif;font-size:11px;letter-spacing:6px;color:rgba(245,239,230,0.4);text-transform:uppercase;">FilmNoir Photobooth Studio</div>
+      <button onclick="exitDisplay()" style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.5);font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:2px;padding:8px 14px;cursor:pointer;">✕ THOÁT</button>
+      <div id="display-rooms" style="display:grid;grid-template-columns:repeat(3,1fr);gap:40px;width:90vw;max-width:1200px;"></div>
+      <div style="position:absolute;bottom:24px;font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:3px;color:rgba(245,239,230,0.3);" id="display-clock"></div>
+    </div>
+
+```
+<div class="ornament">— ◈ —</div>
+<div class="card fade-in" style="text-align:center;padding:48px 40px;">
+  <div style="font-size:3rem;margin-bottom:16px;">🖥️</div>
+  <div class="card-title" style="justify-content:center;">Màn Hình Quầy</div>
+  <p style="font-family:'Montserrat',sans-serif;font-size:0.85rem;color:var(--gray);margin-bottom:28px;line-height:1.7;">
+    Bật chế độ toàn màn hình để hiển thị số đang phục vụ.<br/>
+    Đặt máy tính ở quầy hướng về phía khách.
+  </p>
+  <button class="btn btn-primary" style="max-width:280px;margin:0 auto;" onclick="launchDisplay()">▶ Bật Màn Hình Quầy</button>
+</div>
+```
+
+  </div>
+
   <!-- ADMIN -->
 
   <div id="tab-admin" class="tab-content" style="display:none;">
@@ -388,7 +436,9 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
       <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
         <button class="btn btn-primary" style="width:auto;" onclick="serveNext()">→ Phục Vụ Số Tiếp Theo</button>
         <button class="btn btn-cancel" onclick="resetRoom()">↺ Reset Phòng Này</button>
+        <button class="btn btn-cancel" id="btn-toggle-room" style="border-color:var(--gray);color:var(--gray);" onclick="toggleRoom()">⏸ Đóng Phòng</button>
       </div>
+      <div id="room-closed-banner" style="display:none;background:#b43c3c;color:white;padding:10px 16px;font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:16px;">⛔ PHÒNG NÀY ĐANG ĐÓNG — Khách không thể đặt lịch</div>
       <div id="admin-pending-list" style="margin-bottom:20px;"></div>
       <div id="admin-queue-list"></div>
     </div>
@@ -647,6 +697,42 @@ function renderStatsUI(data, isFiltered=false) {
     </div>
   `;
 
+  // Peak hours analysis from customer data
+  const custSnap2 = await get(ref(db, `filmnoir/customers/${todayKey()}`));
+  const todayCust = custSnap2.val();
+  const peakEl = document.getElementById('stats-peak') || (() => {
+    const d = document.createElement('div');
+    d.id = 'stats-peak';
+    document.getElementById('stats-daily').insertAdjacentElement('beforebegin', d);
+    return d;
+  })();
+
+  if(todayCust) {
+    const hourBuckets = {};
+    Object.values(todayCust).forEach(c => {
+      if(c.status !== 'approved') return;
+      const t = c.approvedAt || '';
+      const h = t.split(':')[0];
+      if(h) hourBuckets[h] = (hourBuckets[h]||0) + 1;
+    });
+    const maxVal = Math.max(...Object.values(hourBuckets), 1);
+    const sortedHours = Object.entries(hourBuckets).sort((a,b)=>a[0]-b[0]);
+    if(sortedHours.length) {
+      peakEl.innerHTML = `
+        <div style="font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gray);margin-bottom:12px;">⏰ Giờ Cao Điểm Hôm Nay</div>
+        <div style="background:var(--cream);border:1px solid var(--beige-dark);padding:20px;margin-bottom:24px;">
+          ${sortedHours.map(([h,v])=>`
+            <div class="peak-bar-wrap">
+              <div class="peak-bar-label">${h}:00</div>
+              <div class="peak-bar" style="width:${Math.round(v/maxVal*100)}%;min-width:4px;"></div>
+              <div class="peak-bar-num">${v} khách</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } else { peakEl.innerHTML = ''; }
+  } else { peakEl.innerHTML = ''; }
+
   dailyEl.innerHTML = days.map(([day, rooms]) => {
     const dayApproved = Object.values(rooms).reduce((s,r)=>s+(r.approved||0),0);
     const dayCancelled = Object.values(rooms).reduce((s,r)=>s+(r.cancelled||0),0);
@@ -657,6 +743,7 @@ function renderStatsUI(data, isFiltered=false) {
           <div style="display:flex;gap:12px;align-items:center;">
             <span style="font-family:'Montserrat',sans-serif;font-size:10px;color:var(--wine);">✓ ${dayApproved} khách</span>
             <span style="font-family:'Montserrat',sans-serif;font-size:10px;color:#b43c3c;">✕ ${dayCancelled} huỷ</span>
+            <span style="font-family:'Montserrat',sans-serif;font-size:10px;color:#2d7a4f;">${(dayApproved*120000).toLocaleString('vi-VN')}đ</span>
             <button onclick="exportExcel('day','${day}')" style="font-family:'Montserrat',sans-serif;font-size:8px;letter-spacing:1px;padding:4px 10px;background:var(--wine);color:var(--beige);border:none;cursor:pointer;">↓ Excel</button>
           </div>
         </div>
@@ -688,7 +775,7 @@ window.exportExcel = async function(mode, specificDay='') {
 
   const rows = [];
   // Header
-  rows.push(['Ngày','Phòng 1 – Star Light (Khách)','Phòng 1 (Huỷ)','Phòng 2 – Heart Garden (Khách)','Phòng 2 (Huỷ)','Phòng 3 – Red Cherry (Khách)','Phòng 3 (Huỷ)','Tổng Khách','Tổng Huỷ']);
+  rows.push(['Ngày','Phòng 1 – Star Light (Khách)','Phòng 1 (Huỷ)','Phòng 2 – Heart Garden (Khách)','Phòng 2 (Huỷ)','Phòng 3 – Red Cherry (Khách)','Phòng 3 (Huỷ)','Tổng Khách','Tổng Huỷ','Doanh Thu Ước Tính (VNĐ)']);
 
   let grandApproved=0, grandCancelled=0;
   const sortedDays = Object.entries(exportData).sort((a,b)=>a[0].localeCompare(b[0]));
@@ -699,11 +786,11 @@ window.exportExcel = async function(mode, specificDay='') {
     const ta = (r1.approved||0)+(r2.approved||0)+(r3.approved||0);
     const tc = (r1.cancelled||0)+(r2.cancelled||0)+(r3.cancelled||0);
     grandApproved+=ta; grandCancelled+=tc;
-    rows.push([day, r1.approved||0, r1.cancelled||0, r2.approved||0, r2.cancelled||0, r3.approved||0, r3.cancelled||0, ta, tc]);
+    rows.push([day, r1.approved||0, r1.cancelled||0, r2.approved||0, r2.cancelled||0, r3.approved||0, r3.cancelled||0, ta, tc, ta*120000]);
   });
 
   // Total row
-  rows.push(['TỔNG CỘNG','','','','','','',grandApproved,grandCancelled]);
+  rows.push(['TỔNG CỘNG','','','','','','',grandApproved,grandCancelled,grandApproved*120000]);
 
   // Weekly summary sheet
   const weekRows = [['Tuần (Thứ 2)','Tổng Khách','Tổng Huỷ']];
@@ -754,16 +841,106 @@ window.exportExcel = async function(mode, specificDay='') {
     });
   });
 
+  // Peak hours sheet from today
+  const peakSnap = await get(ref(db, `filmnoir/customers/${todayKey()}`));
+  const peakData = peakSnap.val();
+  const peakRows = [['Giờ','Số Khách']];
+  if(peakData) {
+    const hb = {};
+    Object.values(peakData).forEach(c => {
+      if(c.status!=='approved') return;
+      const h = (c.approvedAt||'').split(':')[0];
+      if(h) hb[h] = (hb[h]||0)+1;
+    });
+    Object.entries(hb).sort((a,b)=>a[0]-b[0]).forEach(([h,v])=>peakRows.push([`${h}:00`,v]));
+  }
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Theo Ngày');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(weekRows), 'Theo Tuần');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(monthRows), 'Theo Tháng');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(approvedRows), 'DS Khách Đã Chụp');
+  if(peakRows.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(peakRows), 'Giờ Cao Điểm');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cancelledRows), 'DS Khách Đã Huỷ');
 
   const label = mode==='day' ? specificDay : mode==='filtered' ? `${fromVal}_${toVal}` : 'TatCa';
   XLSX.writeFile(wb, `FilmNoir_ThongKe_${label}.xlsx`);
 };
+
+// ─── DISPLAY SCREEN ──────────────────────────────────────────────
+function renderDisplayPreview() {
+  // nothing needed, preview is static card
+}
+
+window.launchDisplay = function() {
+  document.getElementById('display-screen').style.display='flex';
+  updateDisplayScreen();
+  startDisplayClock();
+  // request fullscreen
+  document.getElementById('display-screen').requestFullscreen && 
+  document.getElementById('display-screen').requestFullscreen();
+};
+
+window.exitDisplay = function() {
+  document.getElementById('display-screen').style.display='none';
+  document.exitFullscreen && document.exitFullscreen();
+};
+
+function updateDisplayScreen() {
+  const el = document.getElementById('display-rooms');
+  if(!el || document.getElementById('display-screen').style.display==='none') return;
+  el.innerHTML = ROOMS.map((r,i) => {
+    const room = state.rooms[i];
+    const confirmed = room.queue.filter(e => e.status !== 'pending');
+    const isClosed = room.closed;
+    return `<div class="display-room-card">
+      <div class="display-room-name">${r.name}</div>
+      <div class="display-serving-label">${r.label}</div>
+      ${isClosed
+        ? `<div class="display-closed">⛔ ĐANG ĐÓNG</div>`
+        : `<div class="display-serving-label">Đang phục vụ</div>
+           <div class="display-serving-num">${room.currentServing ? String(room.currentServing).padStart(2,'0') : '–'}</div>
+           <div class="display-waiting">${confirmed.length} người đang chờ</div>`
+      }
+    </div>`;
+  }).join('');
+}
+
+function startDisplayClock() {
+  const el = document.getElementById('display-clock');
+  if(!el) return;
+  const tick = () => {
+    el.textContent = new Date().toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  };
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ─── TOGGLE ROOM OPEN/CLOSED ──────────────────────────────────────
+window.toggleRoom = async function() {
+  const room = state.rooms[activeAdminRoom];
+  const isClosed = room.closed;
+  setLoading(true);
+  await set(ref(db, `${dbPath()}/${ROOMS[activeAdminRoom].key}/closed`), !isClosed);
+  setLoading(false);
+};
+
+function updateToggleBtn(isClosed) {
+  const btn = document.getElementById('btn-toggle-room');
+  const banner = document.getElementById('room-closed-banner');
+  if(!btn) return;
+  if(isClosed) {
+    btn.textContent = '▶ Mở Phòng';
+    btn.style.borderColor = '#2d7a4f';
+    btn.style.color = '#2d7a4f';
+    banner.style.display = 'block';
+  } else {
+    btn.textContent = '⏸ Đóng Phòng';
+    btn.style.borderColor = 'var(--gray)';
+    btn.style.color = 'var(--gray)';
+    banner.style.display = 'none';
+  }
+}
 
 function startListening() {
   // Listen cancelled history
@@ -809,6 +986,7 @@ function startListening() {
           queue: rd.queue ? Object.values(rd.queue).sort((a,b) => a.order - b.order) : [],
           currentServing: rd.currentServing || 0,
           counter: rd.counter || 0,
+          closed: rd.closed || false,
         };
       });
     }
@@ -819,7 +997,13 @@ function startListening() {
 
 function rerenderCurrentTab() {
   if(currentTab === 'queue') { renderQueueOverview(); renderQueueRoom(activeQueueRoom); }
-  if(currentTab === 'admin') { renderAdminOverview(); renderAdminRoom(activeAdminRoom); }
+  if(currentTab === 'admin') { 
+    renderAdminOverview(); renderAdminRoom(activeAdminRoom);
+    updateToggleBtn(state.rooms[activeAdminRoom].closed);
+  }
+  // Always update display screen if open
+  updateDisplayScreen();
+  checkNotifications();
 }
 
 // ─── FIREBASE WRITE HELPERS ───────────────────────────────────────
@@ -913,6 +1097,10 @@ window.bookQueue = async function() {
   if(!name) { msgEl.innerHTML='<div class="msg msg-error">Vui lòng nhập họ tên.</div>'; return; }
   if(!phone||phone.length<8) { msgEl.innerHTML='<div class="msg msg-error">Vui lòng nhập số điện thoại hợp lệ.</div>'; return; }
   if(!roomKey) { msgEl.innerHTML='<div class="msg msg-error">Vui lòng chọn phòng chụp.</div>'; return; }
+  const selectedRi = ROOMS.findIndex(r => r.key === roomKey);
+  if(state.rooms[selectedRi] && state.rooms[selectedRi].closed) {
+    msgEl.innerHTML='<div class="msg msg-error">Phòng này hiện đang đóng, vui lòng chọn phòng khác.</div>'; return;
+  }
 
   // Check duplicate across all rooms
   const allEntries = state.rooms.flatMap(r => r.queue);
@@ -944,6 +1132,21 @@ window.bookQueue = async function() {
     document.getElementById('pending-ticket').style.display='block';
     document.getElementById('confirmed-ticket').style.display='none';
 
+    // Start countdown timer for wait estimate
+    const startCountdown = () => {
+      const cdEl = document.getElementById('wait-countdown');
+      if(!cdEl) return;
+      const ri2 = ROOMS.findIndex(r => r.key === roomKey);
+      const confirmed = state.rooms[ri2] ? state.rooms[ri2].queue.filter(e => e.status !== 'pending') : [];
+      const waitCount = confirmed.length;
+      if(waitCount <= 0) { cdEl.textContent = ''; return; }
+      const totalMins = waitCount * 6;
+      const hrs = Math.floor(totalMins/60), mins = totalMins%60;
+      cdEl.textContent = `⏱ Ước tính chờ khoảng ${hrs>0?hrs+' tiếng ':''}${mins} phút`;
+    };
+    startCountdown();
+    const countdownInterval = setInterval(startCountdown, 30000);
+
     // Listen for approval - when status changes to confirmed, show real ticket
     const entryRef = ref(db, `${dbPath()}/${roomKey}/queue/${id}`);
     const unsubscribe = onValue(entryRef, snap => {
@@ -951,6 +1154,7 @@ window.bookQueue = async function() {
       if(!data) return; // deleted (cancelled)
       if(data.status === 'confirmed' && data.num > 0) {
         // Show confirmed ticket with real number
+        clearInterval(countdownInterval);
         document.getElementById('pending-ticket').style.display='none';
         document.getElementById('confirmed-ticket').style.display='block';
         document.getElementById('ticket-num').textContent = String(data.num).padStart(2,'0');
@@ -1252,130 +1456,177 @@ function renderAdminRoom(ri) {
           <button class="btn-approve" onclick="approveEntry(${ri},'${entry.id}')">✓ Duyệt</button>
           <button class="btn-remove" onclick="cancelEntry(${ri},'${entry.id}',${entry.num})">Huỷ</button>
         </div>
-      `).join('');
-  }
+        <div style="padding:6px 16px 10px;background:#fff8f8;border:1px solid #e8b4b4;border-top:none;margin-bottom:6px;display:flex;gap:8px;align-items:center;">
+          <textarea class="note-input" rows="1" placeholder="Ghi chú..." onchange="saveNote(${ri},'${entry.id}',this.value)">${entry.note||''}</textarea>
 
-  pendingEl.innerHTML = pendingHTML || '';
+```
+    </div>
+  `).join('');
+```
 
-  // Confirmed queue section
-  const listEl = document.getElementById('admin-queue-list');
-  if(!confirmed.length) {
-    listEl.innerHTML='<p style="color:var(--gray);font-style:italic;">Hàng chờ phòng này đang trống.</p>';
-    return;
-  }
-  listEl.innerHTML = `<div class="queue-section-title">✓ Hàng Chờ Chính Thức (${confirmed.length})</div>` +
-    confirmed.map((entry,idx) => `
-      <div class="admin-queue-item">
-        <div class="q-num">${String(entry.num).padStart(2,'0')}</div>
-        <div class="q-info" style="flex:1;">
-          <div class="q-name">${entry.name}</div>
-          <div class="q-detail">${entry.phone} · ${entry.time}</div>
-        </div>
-        ${idx===0?`<button class="btn-serve" onclick="serveNext()">Phục vụ →</button>`:''}
-        <button class="btn-remove" onclick="cancelEntry(${ri},'${entry.id}',${entry.num})">Huỷ</button>
-      </div>
-    `).join('');
+}
+
+pendingEl.innerHTML = pendingHTML || ‘’;
+
+// Confirmed queue section
+const listEl = document.getElementById(‘admin-queue-list’);
+if(!confirmed.length) {
+listEl.innerHTML=’<p style="color:var(--gray);font-style:italic;">Hàng chờ phòng này đang trống.</p>’;
+return;
+}
+listEl.innerHTML = `<div class="queue-section-title">✓ Hàng Chờ Chính Thức (${confirmed.length})</div>` +
+confirmed.map((entry,idx) => ` <div class="admin-queue-item"> <div class="q-num">${String(entry.num).padStart(2,'0')}</div> <div class="q-info" style="flex:1;"> <div class="q-name">${entry.name}</div> <div class="q-detail">${entry.phone} · ${entry.time}</div> </div> ${idx===0?`<button class="btn-serve" onclick="serveNext()">Phục vụ →</button>`:''} <button class="btn-remove" onclick="cancelEntry(${ri},'${entry.id}',${entry.num})">Huỷ</button> </div> `).join(’’);
 }
 
 window.approveEntry = async function(ri, id) {
-  setLoading(true);
-  try {
-    // Assign real queue number via transaction
-    const counterRef = ref(db, `${dbPath()}/${ROOMS[ri].key}/counter`);
-    let newNum;
-    await runTransaction(counterRef, current => { newNum = (current || 0) + 1; return newNum; });
-    await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), { status: 'confirmed', num: newNum });
-    // Log stats + customer detail
-    const statsRef = ref(db, `filmnoir/stats/${todayKey()}/${ROOMS[ri].key}`);
-    await runTransaction(statsRef, current => {
-      const c = current || { approved:0, cancelled:0 };
-      return { ...c, approved: (c.approved||0) + 1 };
-    });
-    // Save customer record
-    const entrySnap2 = await get(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`));
-    const entryData = entrySnap2.val();
-    if(entryData) {
-      await set(ref(db, `filmnoir/customers/${todayKey()}/${id}`), {
-        name: entryData.name,
-        phone: entryData.phone,
-        room: ROOMS[ri].key,
-        roomName: `${ROOMS[ri].label} – ${ROOMS[ri].name}`,
-        num: newNum,
-        approvedAt: new Date().toLocaleTimeString('vi-VN'),
-        status: 'approved'
-      });
-    }
-    document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">✓ Đã duyệt! Cấp số <strong>${String(newNum).padStart(2,'0')}</strong> cho khách.</div>`;
-  } catch(e) {
-    document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
-  }
-  setLoading(false);
+setLoading(true);
+try {
+// Get entry data from local state BEFORE updating
+const entryData = state.rooms[ri].queue.find(e => e.id === id);
+if(!entryData) { setLoading(false); return; }
+
+```
+// Assign real queue number via transaction
+const counterRef = ref(db, `${dbPath()}/${ROOMS[ri].key}/counter`);
+let newNum;
+await runTransaction(counterRef, current => { newNum = (current || 0) + 1; return newNum; });
+
+// Update status
+await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), { status: 'confirmed', num: newNum });
+
+// Log stats
+const statsRef = ref(db, `filmnoir/stats/${todayKey()}/${ROOMS[ri].key}`);
+await runTransaction(statsRef, current => {
+  const c = current || { approved:0, cancelled:0 };
+  return { ...c, approved: (c.approved||0) + 1 };
+});
+
+// Save customer record using local state data
+await set(ref(db, `filmnoir/customers/${todayKey()}/${id}`), {
+  name: entryData.name,
+  phone: entryData.phone,
+  room: ROOMS[ri].key,
+  roomName: `${ROOMS[ri].label} – ${ROOMS[ri].name}`,
+  num: newNum,
+  approvedAt: new Date().toLocaleTimeString('vi-VN'),
+  status: 'approved'
+});
+
+document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">✓ Đã duyệt! Cấp số <strong>${String(newNum).padStart(2,'0')}</strong> cho khách.</div>`;
+```
+
+} catch(e) {
+console.error(e);
+document.getElementById(‘msg-admin’).innerHTML=’<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>’;
+}
+setLoading(false);
 };
 
 window.serveNext = async function() {
-  const room = state.rooms[activeAdminRoom];
-  const confirmed = room.queue.filter(e => e.status !== 'pending');
-  if(!confirmed.length) {
-    document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Không có ai trong hàng chờ chính thức.</div>'; return;
-  }
-  const served = confirmed[0];
-  setLoading(true);
-  try {
-    await update(roomRef(activeAdminRoom), { currentServing: served.num });
-    await remove(ref(db, `${dbPath()}/${ROOMS[activeAdminRoom].key}/queue/${served.id}`));
-    document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">Đang phục vụ số <strong>${String(served.num).padStart(2,'0')}</strong> – ${served.name}</div>`;
-  } catch(e) {
-    document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
-  }
-  setLoading(false);
+const room = state.rooms[activeAdminRoom];
+const confirmed = room.queue.filter(e => e.status !== ‘pending’);
+if(!confirmed.length) {
+document.getElementById(‘msg-admin’).innerHTML=’<div class="msg msg-error">Không có ai trong hàng chờ chính thức.</div>’; return;
+}
+const served = confirmed[0];
+setLoading(true);
+try {
+await update(roomRef(activeAdminRoom), { currentServing: served.num });
+await remove(ref(db, `${dbPath()}/${ROOMS[activeAdminRoom].key}/queue/${served.id}`));
+document.getElementById(‘msg-admin’).innerHTML=`<div class="msg msg-success">Đang phục vụ số <strong>${String(served.num).padStart(2,'0')}</strong> – ${served.name}</div>`;
+} catch(e) {
+document.getElementById(‘msg-admin’).innerHTML=’<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>’;
+}
+setLoading(false);
+};
+
+window.saveNote = async function(ri, id, note) {
+await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), { note });
 };
 
 window.cancelRoomChange = async function(ri, id) {
-  setLoading(true);
-  await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), {
-    changeRequested: false,
-    changeToRoom: null,
-    changeToRoomName: null,
-    changeRequestedAt: null
-  });
-  setLoading(false);
-  document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Đã từ chối yêu cầu đổi phòng.</div>';
+setLoading(true);
+await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), {
+changeRequested: false,
+changeToRoom: null,
+changeToRoomName: null,
+changeRequestedAt: null
+});
+setLoading(false);
+document.getElementById(‘msg-admin’).innerHTML=’<div class="msg msg-error">Đã từ chối yêu cầu đổi phòng.</div>’;
 };
 
 window.cancelEntry = async function(ri, id, num) {
-  setLoading(true);
-  await remove(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`));
-  setLoading(false);
+setLoading(true);
+await remove(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`));
+setLoading(false);
 };
 
 window.resetRoom = async function() {
-  const r = ROOMS[activeAdminRoom];
-  if(!confirm(`Reset toàn bộ hàng chờ ${r.label} – ${r.name}?`)) return;
-  setLoading(true);
-  await set(roomRef(activeAdminRoom), { queue:{}, currentServing:0, counter:0 });
-  setLoading(false);
-  document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">Đã reset hàng chờ ${r.label}.</div>`;
+const r = ROOMS[activeAdminRoom];
+if(!confirm(`Reset toàn bộ hàng chờ ${r.label} – ${r.name}?`)) return;
+setLoading(true);
+await set(roomRef(activeAdminRoom), { queue:{}, currentServing:0, counter:0 });
+setLoading(false);
+document.getElementById(‘msg-admin’).innerHTML=`<div class="msg msg-success">Đã reset hàng chờ ${r.label}.</div>`;
 };
 
 // ─── MIDNIGHT AUTO RESET ──────────────────────────────────────────
 function scheduleMidnightReset() {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24,0,5,0); // 00:00:05 next day
-  const ms = midnight - now;
-  setTimeout(() => {
-    // Old day's data stays under old key automatically
-    // New day starts fresh since todayKey() changes
-    rerenderCurrentTab();
-    scheduleMidnightReset();
-  }, ms);
+const now = new Date();
+const midnight = new Date(now);
+midnight.setHours(24,0,5,0); // 00:00:05 next day
+const ms = midnight - now;
+setTimeout(() => {
+// Old day’s data stays under old key automatically
+// New day starts fresh since todayKey() changes
+rerenderCurrentTab();
+scheduleMidnightReset();
+}, ms);
+}
+
+// ─── PUSH NOTIFICATIONS ─────────────────────────────────────────
+let notifPermission = false;
+async function requestNotifPermission() {
+if(!(‘Notification’ in window)) return;
+const perm = await Notification.requestPermission();
+notifPermission = perm === ‘granted’;
+}
+
+function sendNotif(title, body) {
+if(!notifPermission || !(‘Notification’ in window)) return;
+if(Notification.permission === ‘granted’) {
+new Notification(title, { body, icon: ‘’ });
+}
+}
+
+// Track previous queue positions for notification
+let prevQueuePos = {};
+
+function checkNotifications() {
+state.rooms.forEach((room, ri) => {
+const confirmed = room.queue.filter(e => e.status !== ‘pending’);
+confirmed.forEach((entry, idx) => {
+const key = entry.id;
+const prev = prevQueuePos[key];
+// Notify when position drops to 3 or less
+if(idx <= 2 && (prev === undefined || prev > 2)) {
+sendNotif(‘FilmNoir – Sắp đến lượt!’, `${entry.name} còn ${idx+1} lượt nữa tại ${ROOMS[ri].label}`);
+}
+// Notify when it’s their turn
+if(idx === 0 && prev !== undefined && prev !== 0) {
+sendNotif(‘FilmNoir – Đến lượt rồi! 🎬’, `${entry.name} vui lòng vào ${ROOMS[ri].label} – ${ROOMS[ri].name}`);
+}
+prevQueuePos[key] = idx;
+});
+});
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
+requestNotifPermission();
 startListening();
 scheduleMidnightReset();
 
 </script>
-
 </body>
 </html>
