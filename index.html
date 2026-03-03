@@ -672,7 +672,7 @@ function renderStatsUI(data, isFiltered=false) {
   }).join('');
 }
 
-window.exportExcel = function(mode, specificDay='') {
+window.exportExcel = async function(mode, specificDay='') {
   const fromVal = document.getElementById('stats-from').value;
   const toVal = document.getElementById('stats-to').value;
   let exportData = allStatsData;
@@ -731,10 +731,35 @@ window.exportExcel = function(mode, specificDay='') {
     monthRows.push([mk,s.approved,s.cancelled]);
   });
 
+  // Fetch customer details
+  const custSnap = await get(ref(db, 'filmnoir/customers'));
+  const custData = custSnap.val() || {};
+
+  // Filter customer days same as stats
+  let custDays = Object.entries(custData).sort((a,b)=>a[0].localeCompare(b[0]));
+  if(mode==='day') custDays = custDays.filter(([d])=>d===specificDay);
+  else if(mode==='filtered') custDays = custDays.filter(([d])=>(!fromVal||d>=fromVal)&&(!toVal||d<=toVal));
+
+  // Customer detail sheet - approved
+  const approvedRows = [['Ngày','Số TT','Tên Khách','Số Điện Thoại','Phòng','Giờ Duyệt']];
+  const cancelledRows = [['Ngày','Số TT','Tên Khách','Số Điện Thoại','Phòng','Giờ Huỷ']];
+
+  custDays.forEach(([day, customers]) => {
+    Object.values(customers).forEach(c => {
+      if(c.status === 'approved') {
+        approvedRows.push([day, c.num>0?String(c.num).padStart(2,'0'):'–', c.name, c.phone, c.roomName, c.approvedAt||'']);
+      } else {
+        cancelledRows.push([day, c.num>0?String(c.num).padStart(2,'0'):'–', c.name, c.phone, c.roomName, c.cancelledAt||'']);
+      }
+    });
+  });
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Theo Ngày');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(weekRows), 'Theo Tuần');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(monthRows), 'Theo Tháng');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(approvedRows), 'DS Khách Đã Chụp');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cancelledRows), 'DS Khách Đã Huỷ');
 
   const label = mode==='day' ? specificDay : mode==='filtered' ? `${fromVal}_${toVal}` : 'TatCa';
   XLSX.writeFile(wb, `FilmNoir_ThongKe_${label}.xlsx`);
@@ -1075,6 +1100,16 @@ window.cancelFromCheck = async function() {
         const c = current || { approved:0, cancelled:0 };
         return { ...c, cancelled: (c.cancelled||0) + 1 };
       });
+      // Save customer record
+      await set(ref(db, `filmnoir/customers/${todayKey()}/${entry.id}`), {
+        name: entry.name,
+        phone: entry.phone,
+        room: ROOMS[ri].key,
+        roomName: `${ROOMS[ri].label} – ${ROOMS[ri].name}`,
+        num: entry.num || 0,
+        cancelledAt: new Date().toLocaleTimeString('vi-VN'),
+        status: 'cancelled'
+      });
       // Log to cancelled history
       await set(ref(db, `${dbPath()}/cancelled/${entry.id}`), {
         name: entry.name,
@@ -1250,12 +1285,26 @@ window.approveEntry = async function(ri, id) {
     let newNum;
     await runTransaction(counterRef, current => { newNum = (current || 0) + 1; return newNum; });
     await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), { status: 'confirmed', num: newNum });
-    // Log stats
+    // Log stats + customer detail
     const statsRef = ref(db, `filmnoir/stats/${todayKey()}/${ROOMS[ri].key}`);
     await runTransaction(statsRef, current => {
       const c = current || { approved:0, cancelled:0 };
       return { ...c, approved: (c.approved||0) + 1 };
     });
+    // Save customer record
+    const entrySnap2 = await get(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`));
+    const entryData = entrySnap2.val();
+    if(entryData) {
+      await set(ref(db, `filmnoir/customers/${todayKey()}/${id}`), {
+        name: entryData.name,
+        phone: entryData.phone,
+        room: ROOMS[ri].key,
+        roomName: `${ROOMS[ri].label} – ${ROOMS[ri].name}`,
+        num: newNum,
+        approvedAt: new Date().toLocaleTimeString('vi-VN'),
+        status: 'approved'
+      });
+    }
     document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">✓ Đã duyệt! Cấp số <strong>${String(newNum).padStart(2,'0')}</strong> cho khách.</div>`;
   } catch(e) {
     document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
