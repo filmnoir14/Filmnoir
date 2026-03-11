@@ -385,12 +385,10 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
     <div class="card fade-in">
       <div class="card-title" id="admin-room-title">—</div>
       <div id="msg-admin"></div>
-      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+      <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
         <button class="btn btn-primary" style="width:auto;" onclick="serveNext()">→ Phục Vụ Số Tiếp Theo</button>
         <button class="btn btn-cancel" onclick="resetRoom()">↺ Reset Phòng Này</button>
-        <button id="btn-toggle-room" class="btn btn-cancel" style="border-color:var(--gray);color:var(--gray);" onclick="toggleRoom()">⏸ Đóng Phòng</button>
       </div>
-      <div id="room-closed-banner" style="display:none;background:#b43c3c;color:white;padding:10px 16px;font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:16px;">⛔ PHÒNG NÀY ĐANG ĐÓNG — Khách không thể đặt lịch</div>
       <div id="admin-pending-list" style="margin-bottom:20px;"></div>
       <div id="admin-queue-list"></div>
     </div>
@@ -767,31 +765,6 @@ window.exportExcel = async function(mode, specificDay='') {
   XLSX.writeFile(wb, `FilmNoir_ThongKe_${label}.xlsx`);
 };
 
-window.toggleRoom = async function() {
-  const isClosed = state.rooms[activeAdminRoom].closed;
-  setLoading(true);
-  await set(ref(db, `${dbPath()}/${ROOMS[activeAdminRoom].key}/closed`), !isClosed);
-  setLoading(false);
-};
-
-function updateToggleBtn() {
-  const isClosed = state.rooms[activeAdminRoom] && state.rooms[activeAdminRoom].closed;
-  const btn = document.getElementById('btn-toggle-room');
-  const banner = document.getElementById('room-closed-banner');
-  if(!btn || !banner) return;
-  if(isClosed) {
-    btn.textContent = '▶ Mở Phòng';
-    btn.style.borderColor = '#2d7a4f';
-    btn.style.color = '#2d7a4f';
-    banner.style.display = 'block';
-  } else {
-    btn.textContent = '⏸ Đóng Phòng';
-    btn.style.borderColor = 'var(--gray)';
-    btn.style.color = 'var(--gray)';
-    banner.style.display = 'none';
-  }
-}
-
 function startListening() {
   // Listen cancelled history
   onValue(ref(db, `${dbPath()}/cancelled`), snap => {
@@ -836,7 +809,6 @@ function startListening() {
           queue: rd.queue ? Object.values(rd.queue).sort((a,b) => a.order - b.order) : [],
           currentServing: rd.currentServing || 0,
           counter: rd.counter || 0,
-          closed: rd.closed || false,
         };
       });
     }
@@ -847,7 +819,7 @@ function startListening() {
 
 function rerenderCurrentTab() {
   if(currentTab === 'queue') { renderQueueOverview(); renderQueueRoom(activeQueueRoom); }
-  if(currentTab === 'admin') { renderAdminOverview(); renderAdminRoom(activeAdminRoom); updateToggleBtn(); }
+  if(currentTab === 'admin') { renderAdminOverview(); renderAdminRoom(activeAdminRoom); }
 }
 
 // ─── FIREBASE WRITE HELPERS ───────────────────────────────────────
@@ -933,22 +905,16 @@ function notifMsg(waitCount) {
 // ─── BOOK ─────────────────────────────────────────────────────────
 window.selectPayment = function(method) {
   document.getElementById('book-payment').value = method;
-  const cashLabel = document.getElementById('pay-cash-label');
-  const transferLabel = document.getElementById('pay-transfer-label');
+  const cashEl = document.getElementById('pay-cash-label');
+  const transferEl = document.getElementById('pay-transfer-label');
+  const activeStyle = { borderColor:'var(--wine)', background:'rgba(107,39,55,0.06)', color:'var(--wine)' };
+  const inactiveStyle = { borderColor:'var(--beige-dark)', background:'var(--beige)', color:'' };
   if(method === 'cash') {
-    cashLabel.style.borderColor = 'var(--wine)';
-    cashLabel.style.background = 'rgba(107,39,55,0.06)';
-    cashLabel.style.color = 'var(--wine)';
-    transferLabel.style.borderColor = 'var(--beige-dark)';
-    transferLabel.style.background = '';
-    transferLabel.style.color = '';
+    Object.assign(cashEl.style, activeStyle);
+    Object.assign(transferEl.style, inactiveStyle);
   } else {
-    transferLabel.style.borderColor = 'var(--wine)';
-    transferLabel.style.background = 'rgba(107,39,55,0.06)';
-    transferLabel.style.color = 'var(--wine)';
-    cashLabel.style.borderColor = 'var(--beige-dark)';
-    cashLabel.style.background = '';
-    cashLabel.style.color = '';
+    Object.assign(transferEl.style, activeStyle);
+    Object.assign(cashEl.style, inactiveStyle);
   }
 };
 
@@ -962,10 +928,6 @@ window.bookQueue = async function() {
   if(!name) { msgEl.innerHTML='<div class="msg msg-error">Vui lòng nhập họ tên.</div>'; return; }
   if(!phone||phone.length<8) { msgEl.innerHTML='<div class="msg msg-error">Vui lòng nhập số điện thoại hợp lệ.</div>'; return; }
   if(!roomKey) { msgEl.innerHTML='<div class="msg msg-error">Vui lòng chọn phòng chụp.</div>'; return; }
-  const selRi = ROOMS.findIndex(r => r.key === roomKey);
-  if(state.rooms[selRi] && state.rooms[selRi].closed) {
-    msgEl.innerHTML='<div class="msg msg-error">Phòng này hiện đang đóng, vui lòng chọn phòng khác.</div>'; return;
-  }
   const payMethod = document.getElementById('book-payment').value;
   if(!payMethod) { msgEl.innerHTML='<div class="msg msg-error">Vui lòng chọn hình thức thanh toán.</div>'; return; }
 
@@ -1259,7 +1221,7 @@ window.switchRoomAdmin = function(ri) {
   activeAdminRoom=ri;
   document.querySelectorAll('#admin-room-tabs button').forEach((btn,i) => btn.classList.toggle('active',i===ri));
   document.getElementById('msg-admin').innerHTML='';
-  renderAdminOverview(); renderAdminRoom(ri); updateToggleBtn();
+  renderAdminOverview(); renderAdminRoom(ri);
 };
 
 function renderAdminRoom(ri) {
@@ -1303,7 +1265,7 @@ function renderAdminRoom(ri) {
           <div class="q-num" style="color:#b43c3c;">?</div>
           <div class="q-info" style="flex:1;">
             <div class="q-name">${entry.name}</div>
-            <div class="q-detail">${entry.phone} · ${entry.time} · ${entry.payment === 'cash' ? '💵 Tiền mặt' : '📱 Chuyển khoản'}</div>
+            <div class="q-detail">${entry.phone} · ${entry.time} · ${entry.payment === 'cash' ? '💵 Tiền mặt' : '📱 CK'}</div>
           </div>
           <button class="btn-approve" onclick="approveEntry(${ri},'${entry.id}')">✓ Duyệt</button>
           <button class="btn-remove" onclick="cancelEntry(${ri},'${entry.id}',${entry.num})">Huỷ</button>
@@ -1336,39 +1298,33 @@ function renderAdminRoom(ri) {
 window.approveEntry = async function(ri, id) {
   setLoading(true);
   try {
-    // Get entry data from local state BEFORE updating
-    const entryData = state.rooms[ri].queue.find(e => e.id === id);
-    if(!entryData) { setLoading(false); return; }
-
     // Assign real queue number via transaction
     const counterRef = ref(db, `${dbPath()}/${ROOMS[ri].key}/counter`);
     let newNum;
     await runTransaction(counterRef, current => { newNum = (current || 0) + 1; return newNum; });
-
-    // Update status
     await update(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`), { status: 'confirmed', num: newNum });
-
-    // Log stats
+    // Log stats + customer detail
     const statsRef = ref(db, `filmnoir/stats/${todayKey()}/${ROOMS[ri].key}`);
     await runTransaction(statsRef, current => {
       const c = current || { approved:0, cancelled:0 };
       return { ...c, approved: (c.approved||0) + 1 };
     });
-
-    // Save customer record using local state data
-    await set(ref(db, `filmnoir/customers/${todayKey()}/${id}`), {
-      name: entryData.name,
-      phone: entryData.phone,
-      room: ROOMS[ri].key,
-      roomName: `${ROOMS[ri].label} – ${ROOMS[ri].name}`,
-      num: newNum,
-      approvedAt: new Date().toLocaleTimeString('vi-VN'),
-      status: 'approved'
-    });
-
+    // Save customer record
+    const entrySnap2 = await get(ref(db, `${dbPath()}/${ROOMS[ri].key}/queue/${id}`));
+    const entryData = entrySnap2.val();
+    if(entryData) {
+      await set(ref(db, `filmnoir/customers/${todayKey()}/${id}`), {
+        name: entryData.name,
+        phone: entryData.phone,
+        room: ROOMS[ri].key,
+        roomName: `${ROOMS[ri].label} – ${ROOMS[ri].name}`,
+        num: newNum,
+        approvedAt: new Date().toLocaleTimeString('vi-VN'),
+        status: 'approved'
+      });
+    }
     document.getElementById('msg-admin').innerHTML=`<div class="msg msg-success">✓ Đã duyệt! Cấp số <strong>${String(newNum).padStart(2,'0')}</strong> cho khách.</div>`;
   } catch(e) {
-    console.error(e);
     document.getElementById('msg-admin').innerHTML='<div class="msg msg-error">Lỗi. Vui lòng thử lại.</div>';
   }
   setLoading(false);
