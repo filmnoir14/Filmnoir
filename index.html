@@ -294,6 +294,7 @@ cursor:pointer; margin-bottom:12px; transition:background .2s;
         <div style="font-size:3rem;margin:12px 0;">⏳</div>
         <div class="ticket-name" id="ticket-name">—</div>
         <div class="ticket-room" id="ticket-room">—</div>
+        <div id="ticket-payment" style="font-family:'Montserrat',sans-serif;font-size:9px;letter-spacing:2px;color:var(--gray);margin-top:6px;"></div>
         <hr class="ticket-divider"/>
         <div style="background:linear-gradient(135deg,var(--wine-dark),var(--wine));color:var(--beige);padding:16px 20px;margin:8px 0;font-family:'Montserrat',sans-serif;font-size:0.85rem;letter-spacing:1px;line-height:1.7;text-align:center;">
           💳 Vui lòng thanh toán để xác nhận số của bạn nhé!<br/>
@@ -959,6 +960,7 @@ window.bookQueue = async function() {
     document.getElementById('ticket-wrap').style.display='block';
     document.getElementById('ticket-name').textContent = name;
     document.getElementById('ticket-room').textContent = roomDisplayName(roomKey);
+    document.getElementById('ticket-payment').textContent = payMethod === 'cash' ? '💵 Tiền mặt' : '📱 Chuyển khoản';
     document.getElementById('pending-ticket').style.display='block';
     document.getElementById('confirmed-ticket').style.display='none';
 
